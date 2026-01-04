@@ -11,7 +11,7 @@ import (
 // VerifyContent 表示 tbl_verify_content 表
 type VerifyContent struct {
 	ID        uint           `gorm:"primarykey" json:"id"`
-	TaskID    uint           `gorm:"column:taskId" json:"task_id"` // taskId 字段
+	TaskID    string         `gorm:"column:taskId" json:"task_id"` // taskId 字段
 	Content   JSONContent    `gorm:"type:text" json:"content"`     // JSON 内容字段
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`

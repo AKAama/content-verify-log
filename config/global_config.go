@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 )
@@ -50,13 +51,15 @@ func TryLoadFromDisk(configFilePath string) (*GlobalConfig, error) {
 	viper.AutomaticEnv()
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	if err := viper.ReadInConfig(); err != nil {
-		var configFileNotFoundError viper.ConfigFileNotFoundError
-		if errors.As(err, &configFileNotFoundError) {
+		if errors.As(err, &viper.ConfigFileNotFoundError{}) {
 			return nil, err
 		}
+		return nil, errors.Errorf("解析配置文件错误:%s", err.Error())
 	}
 	cfg := NewDefaultGlobalConfig()
-	if err := viper.Unmarshal(cfg); err != nil {
+	if err := viper.Unmarshal(cfg, func(config *mapstructure.DecoderConfig) {
+		config.TagName = strings.TrimPrefix(fileType, ".")
+	}); err != nil {
 		return nil, err
 	}
 	return cfg, nil

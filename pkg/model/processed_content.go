@@ -5,7 +5,7 @@ type ProcessedContent struct {
 	ID           string `json:"id"`            // UUID
 	OriginalText string `json:"original_text"` // 原文（对应 checkresultstr）
 	ModifiedText string `json:"modified_text"` // 修改后的文章
-	PID          uint   `json:"pid"`           // 对应 tbl_verify_content 表的 taskId
+	PID          string `json:"pid"`           // 对应 tbl_verify_content 表的 taskId
 }
 
 // TableName 指定表名

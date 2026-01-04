@@ -93,16 +93,23 @@ func (s *MigrationService) createDuckDBTable(ctx context.Context) error {
 		return fmt.Errorf("DuckDB 连接未初始化")
 	}
 
+	// 删除旧表（如果存在），确保使用正确的表结构
+	// 这样可以处理表结构变更的情况
+	_, err := duckDB.ExecContext(ctx, "DROP TABLE IF EXISTS processed_content")
+	if err != nil {
+		return fmt.Errorf("删除旧表失败: %v", err)
+	}
+
 	createTableSQL := `
-		CREATE TABLE IF NOT EXISTS processed_content (
-			id VARCHAR PRIMARY KEY,
+		CREATE TABLE processed_content (
+			id TEXT PRIMARY KEY,
 			original_text TEXT,
 			modified_text TEXT,
-			pid BIGINT
+			pid TEXT
 		)
 	`
 
-	_, err := duckDB.ExecContext(ctx, createTableSQL)
+	_, err = duckDB.ExecContext(ctx, createTableSQL)
 	if err != nil {
 		return fmt.Errorf("创建表失败: %v", err)
 	}
@@ -130,7 +137,7 @@ func (s *MigrationService) processAndInsert(ctx context.Context, verifyContent *
 
 	insertSQL := `
 		INSERT INTO processed_content (id, original_text, modified_text, pid)
-		VALUES ($1, $2, $3, $4)
+		VALUES (?, ?, ?, ?)
 	`
 
 	_, err = duckDB.ExecContext(ctx, insertSQL,

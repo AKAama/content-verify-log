@@ -1,12 +1,10 @@
-
 db:
-  host: 127.0.0.1
+  host: 170.18.9.182
   port: 3306
   username: root
   password: Sudy.web123
-  database: cmplus_qa
+  database: content_verify_log
   maxConnections: 100
-
 duckdb:
   dbPath: ./data/content.duckdb
 
