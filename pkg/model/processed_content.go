@@ -6,6 +6,7 @@ type ProcessedContent struct {
 	OriginalText string `json:"original_text"` // 原文（对应 checkresultstr）
 	ModifiedText string `json:"modified_text"` // 修改后的文章
 	PID          string `json:"pid"`           // 对应 tbl_verify_content 表的 taskId
+	ErrorReason  string `json:"error_reason"`  // 错误原因
 }
 
 // TableName 指定表名

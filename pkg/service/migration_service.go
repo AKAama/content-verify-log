@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
-	"gorm.io/gorm"
+	_ "gorm.io/gorm"
 )
 
 type MigrationService struct {
@@ -42,7 +42,6 @@ func (s *MigrationService) MigrateToDuckDB(ctx context.Context, batchSize int) e
 	errors := 0
 
 	for {
-		// 批量获取数据
 		var contents []model.VerifyContent
 		err := db.GetDBWithContext(ctx).
 			Limit(batchSize).
@@ -50,9 +49,6 @@ func (s *MigrationService) MigrateToDuckDB(ctx context.Context, batchSize int) e
 			Find(&contents).Error
 
 		if err != nil {
-			if err == gorm.ErrRecordNotFound || len(contents) == 0 {
-				break
-			}
 			zap.S().Errorf("查询数据失败: %v", err)
 			errors++
 			offset += batchSize
@@ -63,7 +59,6 @@ func (s *MigrationService) MigrateToDuckDB(ctx context.Context, batchSize int) e
 			break
 		}
 
-		// 处理并插入到 DuckDB
 		for _, content := range contents {
 			if err := s.processAndInsert(ctx, &content); err != nil {
 				zap.S().Warnf("处理记录 ID %d 失败: %v", content.ID, err)
@@ -105,7 +100,8 @@ func (s *MigrationService) createDuckDBTable(ctx context.Context) error {
 			id TEXT PRIMARY KEY,
 			original_text TEXT,
 			modified_text TEXT,
-			pid TEXT
+			pid TEXT,
+			error_reason TEXT
 		)
 	`
 
@@ -120,11 +116,8 @@ func (s *MigrationService) createDuckDBTable(ctx context.Context) error {
 
 // processAndInsert 处理单条记录并插入到 DuckDB
 func (s *MigrationService) processAndInsert(ctx context.Context, verifyContent *model.VerifyContent) error {
-	// 处理内容
-	processed, err := s.processor.ProcessContent(verifyContent)
-	if err != nil {
-		return fmt.Errorf("处理内容失败: %v", err)
-	}
+	// 处理内容（即使处理失败也会返回结果，包含错误原因）
+	processed := s.processor.ProcessContent(verifyContent)
 
 	// 生成 UUID
 	processed.ID = uuid.New().String()
@@ -136,15 +129,16 @@ func (s *MigrationService) processAndInsert(ctx context.Context, verifyContent *
 	}
 
 	insertSQL := `
-		INSERT INTO processed_content (id, original_text, modified_text, pid)
-		VALUES (?, ?, ?, ?)
+		INSERT INTO processed_content (id, original_text, modified_text, pid, error_reason)
+		VALUES (?, ?, ?, ?, ?)
 	`
 
-	_, err = duckDB.ExecContext(ctx, insertSQL,
+	_, err := duckDB.ExecContext(ctx, insertSQL,
 		processed.ID,
 		processed.OriginalText,
 		processed.ModifiedText,
 		processed.PID,
+		processed.ErrorReason,
 	)
 
 	if err != nil {

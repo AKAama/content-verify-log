@@ -3,12 +3,12 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"html"
+	"regexp"
 	"sort"
 	"strings"
 
 	"content-verify-log/pkg/model"
-
-	"go.uber.org/zap"
 )
 
 type ContentProcessor struct{}
@@ -18,9 +18,15 @@ func NewContentProcessor() *ContentProcessor {
 }
 
 // ProcessContent 处理验证内容，提取并处理 JSON 数据
-func (p *ContentProcessor) ProcessContent(verifyContent *model.VerifyContent) (*model.ProcessedContent, error) {
+// 即使处理失败也会返回结果，错误原因记录在 ErrorReason 字段中
+func (p *ContentProcessor) ProcessContent(verifyContent *model.VerifyContent) *model.ProcessedContent {
+	result := &model.ProcessedContent{
+		PID: verifyContent.TaskID,
+	}
+
 	if verifyContent == nil {
-		return nil, fmt.Errorf("验证内容为空")
+		result.ErrorReason = "验证内容为空"
+		return result
 	}
 
 	// 解析 JSON
@@ -29,10 +35,12 @@ func (p *ContentProcessor) ProcessContent(verifyContent *model.VerifyContent) (*
 		// 尝试重新解析
 		raw := verifyContent.Content.GetRawContent()
 		if raw == "" {
-			return nil, fmt.Errorf("内容为空")
+			result.ErrorReason = "内容为空"
+			return result
 		}
 		if err := json.Unmarshal([]byte(raw), &jsonData); err != nil {
-			return nil, fmt.Errorf("JSON 解析失败: %v", err)
+			result.ErrorReason = fmt.Sprintf("JSON 解析失败: %v", err)
+			return result
 		}
 	}
 
@@ -58,9 +66,12 @@ func (p *ContentProcessor) ProcessContent(verifyContent *model.VerifyContent) (*
 			originalText, _ = val.(string)
 		}
 		if originalText == "" {
-			return nil, fmt.Errorf("未找到原文字段 checkresultstr")
+			result.ErrorReason = "未找到原文字段 checkresultstr"
+			return result
 		}
 	}
+	// 清洗 HTML 标签
+	result.OriginalText = p.stripHTML(originalText)
 
 	// 提取 checkresultjson（错误信息）
 	checkResultJSON, ok := dataObj["checkresultjson"]
@@ -73,22 +84,33 @@ func (p *ContentProcessor) ProcessContent(verifyContent *model.VerifyContent) (*
 		}
 	}
 
-	// 处理修改后的文章
-	modifiedText, err := p.applyCorrections(originalText, checkResultJSON)
-	if err != nil {
-		zap.S().Warnf("应用修正失败: %v, 使用原文", err)
-		modifiedText = originalText
+	// 检查 checkresultjson 是否为空（nil 或空字符串）
+	if checkResultJSON == nil {
+		result.ErrorReason = "checkresultjson为空"
+		// ModifiedText 保持为空
+		return result
+	}
+	if str, ok := checkResultJSON.(string); ok && str == "" {
+		result.ErrorReason = "checkresultjson为空"
+		// ModifiedText 保持为空
+		return result
 	}
 
-	return &model.ProcessedContent{
-		OriginalText: originalText,
-		ModifiedText: modifiedText,
-		PID:          verifyContent.TaskID,
-	}, nil
+	// 处理修改后的文章
+	modifiedText, err := p.applyCorrections(originalText, checkResultJSON, result)
+	if err != nil {
+		result.ErrorReason = fmt.Sprintf("应用修正失败: %v", err)
+		// ModifiedText 保持为空
+		return result
+	}
+
+	// 清洗 HTML 标签
+	result.ModifiedText = p.stripHTML(modifiedText)
+	return result
 }
 
 // applyCorrections 根据 checkresultjson 将错误词替换回原文
-func (p *ContentProcessor) applyCorrections(originalText string, checkResultJSON interface{}) (string, error) {
+func (p *ContentProcessor) applyCorrections(originalText string, checkResultJSON interface{}, result *model.ProcessedContent) (string, error) {
 	if checkResultJSON == nil {
 		return originalText, nil
 	}
@@ -117,10 +139,14 @@ func (p *ContentProcessor) applyCorrections(originalText string, checkResultJSON
 	// 解析错误信息（checkresultjson 是一个 JSON 字符串）
 	var corrections []Correction
 	if err := json.Unmarshal(jsonBytes, &corrections); err != nil {
-		return originalText, fmt.Errorf("解析 checkresultjson 失败: %v", err)
+		return originalText, fmt.Errorf("checkresultjson格式与预期不符: %v", err)
 	}
 
 	if len(corrections) == 0 {
+		// 没有错误，设置 ErrorReason
+		if result != nil {
+			result.ErrorReason = "没有错误"
+		}
 		return originalText, nil
 	}
 
@@ -130,7 +156,7 @@ func (p *ContentProcessor) applyCorrections(originalText string, checkResultJSON
 	})
 
 	// 应用修正
-	result := originalText
+	modifiedText := originalText
 	for _, corr := range corrections {
 		// 获取正确词（corword 是数组，取第一个）
 		correctWord := corr.ErrWord // 默认使用错误词（如果没有正确词）
@@ -143,28 +169,49 @@ func (p *ContentProcessor) applyCorrections(originalText string, checkResultJSON
 		}
 
 		// 根据位置替换
-		if corr.Pos >= 0 && corr.Pos < len(result) {
+		if corr.Pos >= 0 && corr.Pos < len(modifiedText) {
 			// 检查位置是否匹配
-			if corr.Pos+len(corr.ErrWord) <= len(result) {
-				actualText := result[corr.Pos : corr.Pos+len(corr.ErrWord)]
+			if corr.Pos+len(corr.ErrWord) <= len(modifiedText) {
+				actualText := modifiedText[corr.Pos : corr.Pos+len(corr.ErrWord)]
 				if actualText == corr.ErrWord {
 					// 位置匹配，直接替换
-					result = result[:corr.Pos] + correctWord + result[corr.Pos+len(corr.ErrWord):]
+					modifiedText = modifiedText[:corr.Pos] + correctWord + modifiedText[corr.Pos+len(corr.ErrWord):]
 				} else {
 					// 位置不匹配，尝试在整个文本中查找并替换第一个匹配的
-					result = strings.Replace(result, corr.ErrWord, correctWord, 1)
+					modifiedText = strings.Replace(modifiedText, corr.ErrWord, correctWord, 1)
 				}
 			} else {
 				// 位置超出范围，尝试在整个文本中查找并替换
-				result = strings.Replace(result, corr.ErrWord, correctWord, 1)
+				modifiedText = strings.Replace(modifiedText, corr.ErrWord, correctWord, 1)
 			}
 		} else {
 			// 位置无效，直接替换第一个匹配的
-			result = strings.Replace(result, corr.ErrWord, correctWord, 1)
+			modifiedText = strings.Replace(modifiedText, corr.ErrWord, correctWord, 1)
 		}
 	}
 
-	return result, nil
+	return modifiedText, nil
+}
+
+// stripHTML 清洗 HTML 标签
+func (p *ContentProcessor) stripHTML(text string) string {
+	if text == "" {
+		return text
+	}
+
+	// 先解码 HTML 实体（如 &lt; 转为 <）
+	decoded := html.UnescapeString(text)
+
+	// 使用正则表达式移除所有 HTML 标签
+	// 匹配 <...> 格式的标签，包括自闭合标签
+	htmlTagRegex := regexp.MustCompile(`<[^>]*>`)
+	cleaned := htmlTagRegex.ReplaceAllString(decoded, "")
+
+	// 清理多余的空白字符（可选，根据需要决定是否保留）
+	// cleaned = regexp.MustCompile(`\s+`).ReplaceAllString(cleaned, " ")
+	// cleaned = strings.TrimSpace(cleaned)
+
+	return cleaned
 }
 
 // Correction 表示一个修正项（根据实际 JSON 结构）

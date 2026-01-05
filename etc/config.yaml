@@ -6,5 +6,5 @@ db:
   database: content_verify_log
   maxConnections: 100
 duckdb:
-  dbPath: ./data/content.duckdb
+  dbPath: /Volumes/Storage/data
 

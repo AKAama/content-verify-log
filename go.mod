@@ -4,6 +4,7 @@ go 1.24.7
 
 require (
 	github.com/duckdb/duckdb-go/v2 v2.5.4
+	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/google/uuid v1.6.0
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cast v1.10.0
@@ -28,7 +29,6 @@ require (
 	github.com/duckdb/duckdb-go/mapping v0.0.27 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-sql-driver/mysql v1.8.1 // indirect
-	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/google/flatbuffers v25.9.23+incompatible // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
