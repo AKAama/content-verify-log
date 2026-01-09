@@ -8,7 +8,7 @@ import (
 )
 
 type DuckDBConfig struct {
-	DBPath string `json:"dbPath" yaml:"dbPath"` // SQLite 数据库文件路径（使用 SQLite 替代 DuckDB）
+	DBPath string `json:"dbPath" yaml:"dbPath"` // DuckDB 数据库文件路径
 }
 
 func (d *DuckDBConfig) Validate() []error {

@@ -14,7 +14,7 @@ import (
 var duckDB *sql.DB
 var duckDBOnce sync.Once
 
-// InitDuckDB 初始化 duckdb 连接（使用 SQLite 替代 DuckDB，避免 CGO 依赖）
+// InitDuckDB 初始化 duckdb 连接（源和目标）
 func InitDuckDB(cfg *config.DuckDBConfig) error {
 	var err error
 	duckDBOnce.Do(func() {

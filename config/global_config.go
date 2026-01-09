@@ -15,15 +15,11 @@ type IConfig interface {
 }
 
 type GlobalConfig struct {
-	DBConfig     *DBConfig     `json:"db" yaml:"db"`
 	DuckDBConfig *DuckDBConfig `json:"duckdb" yaml:"duckdb"`
 }
 
 func (g *GlobalConfig) Validate() []error {
 	var errs = make([]error, 0)
-	if es := g.DBConfig.Validate(); len(es) > 0 {
-		errs = append(errs, es...)
-	}
 	if g.DuckDBConfig != nil {
 		if es := g.DuckDBConfig.Validate(); len(es) > 0 {
 			errs = append(errs, es...)
@@ -34,7 +30,6 @@ func (g *GlobalConfig) Validate() []error {
 
 func NewDefaultGlobalConfig() *GlobalConfig {
 	return &GlobalConfig{
-		DBConfig:     NewDefaultDBConfig(),
 		DuckDBConfig: NewDefaultDuckDBConfig(),
 	}
 }

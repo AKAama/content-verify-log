@@ -18,8 +18,8 @@ func NewMigrateCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "migrate",
-		Short: "将 MySQL 数据迁移到 DuckDB",
-		Long:  "从 MySQL 的 tbl_verify_content 表读取数据，解析 JSON 内容，处理后存储到 DuckDB",
+		Short: "处理 DuckDB 中的数据",
+		Long:  "从 DuckDB 的 tbl_verify_content 表读取数据，解析 JSON 内容，处理后存储到同一数据库的 processed_content 表",
 		Run: func(cmd *cobra.Command, args []string) {
 			cfg, err := config.TryLoadFromDisk(configFilePath)
 			if err != nil {
@@ -37,12 +37,6 @@ func NewMigrateCommand() *cobra.Command {
 			}
 
 			ctx := signals.SetupSignalHandler()
-
-			// 初始化 MySQL
-			if err := db.InitTiDB(cfg); err != nil {
-				zap.S().Errorf("MySQL 数据库连接错误:%s", err.Error())
-				return
-			}
 
 			// 初始化 DuckDB
 			if err := db.InitDuckDB(cfg.DuckDBConfig); err != nil {
